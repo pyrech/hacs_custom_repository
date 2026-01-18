@@ -1,0 +1,29 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Authentication",
+                "data": {
+                    "email": "Email",
+                    "password": "Password"
+                },
+                "description": "Please enter your HomeWizard credentials."
+            },
+            "location": {
+                "title": "Home",
+                "data": {
+                    "location_id": "Select your Home"
+                },
+                "description": "Multiple homes found. Please select the one to use."
+            }
+        },
+        "error": {
+            "invalid_auth": "Invalid email or password.",
+            "cannot_connect": "Failed to connect."
+        },
+        "abort": {
+            "already_configured": "This home is already configured.",
+            "no_locations": "No homes found in this account."
+        }
+    }
+}
