@@ -20,24 +20,24 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     entities = []
     # Create a sensor for each value returned by the energyPanel
-    for value in coordinator.data:
-        entities.append(HomeWizardCloudWaterSensor(coordinator, value["type"], value["title"]))
+    for value in coordinator.data.values():
+        entities.append(HomeWizardCloudWaterSensor(coordinator, value))
 
     async_add_entities(entities)
 
 class HomeWizardCloudWaterSensor(CoordinatorEntity, SensorEntity):
-    def __init__(self, coordinator, sensor_type, name):
+    def __init__(self, coordinator, value):
         super().__init__(coordinator)
 
-        self._type = sensor_type
-        self._attr_name = f"HomeWizard {name}"
-        self._attr_unique_id = f"{coordinator.home_id}_{sensor_type}"
+        self._type = value["type"]
+        self._attr_name = f"HomeWizard {value['title']}"
+        self._attr_unique_id = f"{coordinator.home_id}_{self._type}"
 
         # Use TOTAL for daily values that reset at midnight
         self._attr_state_class = SensorStateClass.TOTAL
         
         # Assign Device Class based on type
-        type_lower = sensor_type.lower()
+        type_lower = self._type.lower()
         
         if "water" in type_lower:
             self._attr_device_class = SensorDeviceClass.WATER
@@ -51,7 +51,7 @@ class HomeWizardCloudWaterSensor(CoordinatorEntity, SensorEntity):
         """Return device information about this entity."""
         return {
             "identifiers": {(DOMAIN, self.coordinator.home_id)},
-            "name": f"HomeWizard Home {self.coordinator.home_id}",
+            "name": self.coordinator.config_entry.title,
             "manufacturer": "HomeWizard",
         }
 

@@ -6,6 +6,8 @@ import time
 
 _LOGGER = logging.getLogger(__name__)
 
+USER_AGENT = "nl.homewizard.android.energy/2.0.5(130) Dalvik/2.1.0 (Linux; U; Android 13; Pixel 6 Build/AP4A.250105.002)"
+
 class HomeWizardCloudApi:
     """ApiClient for HomeWizard Cloud API."""
 
@@ -23,7 +25,7 @@ class HomeWizardCloudApi:
 
         try:
             async with async_timeout.timeout(10):
-                async with self._session.get(url, auth=auth) as response:
+                async with self._session.get(url, auth=auth, headers={"User-Agent": USER_AGENT}) as response:
                     if response.status == 200:
                         data = await response.json()
                         self._token = data.get("access_token")
@@ -95,6 +97,7 @@ class HomeWizardCloudApi:
         return {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
+            "User-Agent": USER_AGENT,
         }
 
     async def async_ensure_token(self) -> str:

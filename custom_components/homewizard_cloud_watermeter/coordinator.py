@@ -32,7 +32,8 @@ class HomeWizardCloudDataUpdateCoordinator(DataUpdateCoordinator):
             if not data or "errors" in data:
                 raise UpdateFailed(f"Error fetching GraphQL data: {data.get('errors')}")
             
-            # Return the list of values directly
-            return data["data"]["home"]["energyPanel"]["values"]
+            # Convert list of values to a dict keyed by type for easier lookup
+            values = data["data"]["home"]["energyPanel"]["values"]
+            return {item["type"]: item for item in values}
         except Exception as err:
             raise UpdateFailed(f"Error communicating with API: {err}")
