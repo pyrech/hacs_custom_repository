@@ -6,6 +6,6 @@
     "codeowners": ["@pyrech"],
     "config_flow": true,
     "iot_standard": "cloud",
-    "version": "0.0.3",
+    "version": "0.0.10",
     "requirements": ["aiohttp", "async_timeout"]
   }

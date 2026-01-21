@@ -1,4 +1,3 @@
-"""Config flow for HomeWizard Cloud Watermeter integration."""
 import logging
 import voluptuous as vol
 
@@ -89,9 +88,6 @@ class HomeWizardCloudConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             loc["id"]: f"{loc.get('name', 'Home')} ({loc.get('location', 'No address')})" 
             for loc in locations_data
         }
-
-        # Map ID to Name for the dropdown
-        self._locations = {loc["id"]: loc["name"] for loc in locations_data}
 
         return self.async_show_form(
             step_id="location",

@@ -1,6 +1,8 @@
 import aiohttp
 import async_timeout
 import logging
+import time
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -12,6 +14,7 @@ class HomeWizardCloudApi:
         self._password = password
         self._session = session
         self._token = None
+        self._token_expires_at = 0
 
     async def async_authenticate(self) -> bool:
         """Authenticate with the Basic Auth to get a Bearer token."""
@@ -24,7 +27,11 @@ class HomeWizardCloudApi:
                     if response.status == 200:
                         data = await response.json()
                         self._token = data.get("access_token")
-                        _LOGGER.debug("Successfully authenticated. Token received.")
+                        # Store expiration time (current time + expires_in)
+                        # We subtract 60 seconds as a safety margin
+                        expires_in = data.get("expires_in", 3600)
+                        self._token_expires_at = time.time() + expires_in - 60
+                        _LOGGER.debug("Successfully authenticated. Token expires in %s s", expires_in)
                         return True
                     
                     _LOGGER.error("Authentication failed with status: %s", response.status)
@@ -49,14 +56,50 @@ class HomeWizardCloudApi:
                 _LOGGER.error("Error fetching locations: %s", ex)
                 return []
 
-    async def get_headers(self):
-        """Get headers for GraphQL requests, renewing token if necessary."""
-        # Simple implementation: we reuse the token we have.
-        # In a full version, we could check expiration here.
-        if not self._token:
-            await self.async_authenticate()
-            
+    async def async_get_energy_panel_values(self, home_id: int, period: str):
+        """Fetch energy panel values for a specific period."""
+        url = "https://api.homewizard.energy/v1/graphql"
+        headers = await self.get_headers()
+        
+        payload = {
+            "operationName": "EnergyPanelValues",
+            "variables": {
+                "homeId": home_id,
+                "period": period
+            },
+            "query": (
+                "query EnergyPanelValues($homeId: Int!, $period: TsdbPeriod!) { "
+                "home(id: $homeId) { "
+                "energyPanel { "
+                "values(period: $period) { "
+                "type title displayValue displayUnit "
+                "additionalValue { type title displayString displayValue displayUnit } "
+                "} } } }"
+            )
+        }
+
+        try:
+            async with async_timeout.timeout(10):
+                async with self._session.post(url, json=payload, headers=headers) as response:
+                    if response.status == 200:
+                        return await response.json()
+                    _LOGGER.error("GraphQL energy panel request failed: %s", response.status)
+                    return None
+        except Exception as ex:
+            _LOGGER.error("Error during energy panel GraphQL request: %s", ex)
+            return None
+
+    async def get_headers(self) -> dict:
+        """Get headers for GraphQL/API requests."""
+        token = await self.async_ensure_token()
         return {
-            "Authorization": f"Bearer {self._token}",
+            "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         }
+
+    async def async_ensure_token(self) -> str:
+        """Check if token is valid and renew it if necessary."""
+        if not self._token or time.time() > self._token_expires_at:
+            _LOGGER.debug("Token expired or missing, renewing...")
+            await self.async_authenticate()
+        return self._token
