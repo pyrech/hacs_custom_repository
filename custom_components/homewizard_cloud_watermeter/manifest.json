@@ -1,8 +1,8 @@
 {
     "domain": "homewizard_cloud_watermeter",
     "name": "HomeWizard Cloud Watermeter",
-    "documentation": "https://github.com/pyrech/homewizard_cloud_watermeter_hacs",
-    "issue_tracker": "https://github.com/pyrech/homewizard_cloud_watermeter_hacs/issues",
+    "documentation": "https://github.com/pyrech/homewizard_cloud_watermeter",
+    "issue_tracker": "https://github.com/pyrech/homewizard_cloud_watermeter/issues",
     "dependencies": [],
     "codeowners": ["@pyrech"],
     "config_flow": true,
