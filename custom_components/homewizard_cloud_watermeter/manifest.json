@@ -1,13 +1,13 @@
 {
     "domain": "homewizard_cloud_watermeter",
     "name": "HomeWizard Cloud Watermeter",
-    "documentation": "https://github.com/pyrech/homewizard_cloud_watermeter",
-    "issue_tracker": "https://github.com/pyrech/homewizard_cloud_watermeter/issues",
-    "dependencies": [],
     "codeowners": ["@pyrech"],
     "config_flow": true,
-    "iot_class": "cloud_polling",
+    "dependencies": [],
+    "documentation": "https://github.com/pyrech/homewizard_cloud_watermeter",
     "integration_type": "hub",
-    "version": "0.1.0",
-    "requirements": []
+    "iot_class": "cloud_polling",
+    "issue_tracker": "https://github.com/pyrech/homewizard_cloud_watermeter/issues",
+    "requirements": [],
+    "version": "0.1.0"
   }

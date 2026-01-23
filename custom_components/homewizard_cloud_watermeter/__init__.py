@@ -3,6 +3,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.loader import async_get_integration
 
 from .api import HomeWizardCloudApi
 from .const import DOMAIN, CONF_EMAIL, CONF_PASSWORD
@@ -14,11 +15,13 @@ PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     session = async_get_clientsession(hass)
+    integration = await async_get_integration(hass, DOMAIN)
     
     api = HomeWizardCloudApi(
         entry.data[CONF_EMAIL],
         entry.data[CONF_PASSWORD],
-        session
+        session,
+        integration.version
     )
 
     coordinator = HomeWizardCloudDataUpdateCoordinator(

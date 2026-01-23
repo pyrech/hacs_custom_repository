@@ -3,20 +3,18 @@ import async_timeout
 import logging
 import time
 
-
 _LOGGER = logging.getLogger(__name__)
-
-USER_AGENT = "nl.homewizard.android.energy/2.0.5(130) Dalvik/2.1.0 (Linux; U; Android 13; Pixel 6 Build/AP4A.250105.002)"
 
 class HomeWizardCloudApi:
     """ApiClient for HomeWizard Cloud API."""
 
-    def __init__(self, username, password, session: aiohttp.ClientSession):
+    def __init__(self, username, password, session: aiohttp.ClientSession, version: str):
         self._username = username
         self._password = password
         self._session = session
         self._token = None
         self._token_expires_at = 0
+        self._user_agent = f"HomeWizardCloudWatermeter/{version} (+https://github.com/pyrech/homewizard_cloud_watermeter)"
 
     async def async_authenticate(self) -> bool:
         """Authenticate with the Basic Auth to get a Bearer token."""
@@ -25,7 +23,7 @@ class HomeWizardCloudApi:
 
         try:
             async with async_timeout.timeout(10):
-                async with self._session.get(url, auth=auth, headers={"User-Agent": USER_AGENT}) as response:
+                async with self._session.get(url, auth=auth, headers={"User-Agent": self._user_agent}) as response:
                     if response.status == 200:
                         data = await response.json()
                         self._token = data.get("access_token")
@@ -97,7 +95,7 @@ class HomeWizardCloudApi:
         return {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
-            "User-Agent": USER_AGENT,
+            "User-Agent": self._user_agent,
         }
 
     async def async_ensure_token(self) -> str:

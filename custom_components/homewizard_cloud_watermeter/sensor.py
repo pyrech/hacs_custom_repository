@@ -41,10 +41,6 @@ class HomeWizardCloudWaterSensor(CoordinatorEntity, SensorEntity):
         
         if "water" in type_lower:
             self._attr_device_class = SensorDeviceClass.WATER
-        # elif "gas" in type_lower:
-        #     self._attr_device_class = SensorDeviceClass.GAS
-        # elif "energy" in type_lower:
-        #     self._attr_device_class = SensorDeviceClass.ENERGY
 
     @property
     def device_info(self):

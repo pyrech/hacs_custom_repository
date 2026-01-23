@@ -3,6 +3,7 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.loader import async_get_integration
 import homeassistant.helpers.config_validation as cv
 
 from .api import HomeWizardCloudApi
@@ -26,12 +27,14 @@ class HomeWizardCloudConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             session = async_get_clientsession(self.hass)
+            integration = await async_get_integration(self.hass, DOMAIN)
             
             # Initialize our API client with user credentials
             api = HomeWizardCloudApi(
                 user_input[CONF_EMAIL], 
                 user_input[CONF_PASSWORD], 
-                session
+                session,
+                integration.version,
             )
 
             if await api.async_authenticate():
@@ -57,10 +60,12 @@ class HomeWizardCloudConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         
         # We need the API again to fetch locations or validate
         session = async_get_clientsession(self.hass)
+        integration = await async_get_integration(self.hass, DOMAIN)
         api = HomeWizardCloudApi(
             self._data[CONF_EMAIL], 
             self._data[CONF_PASSWORD], 
-            session
+            session,
+            integration.version,
         )
 
         if user_input is not None:
