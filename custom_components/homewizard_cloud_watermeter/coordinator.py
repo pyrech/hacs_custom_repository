@@ -122,7 +122,8 @@ class HomeWizardCloudDataUpdateCoordinator(DataUpdateCoordinator):
             source=DOMAIN,
             statistic_id=statistic_id,
             unit_of_measurement=UnitOfVolume.LITERS,
-            mean_type="arithmetic",
+            unit_class="volume",
+            mean_type=None,
         )
 
         hourly_data = {}
