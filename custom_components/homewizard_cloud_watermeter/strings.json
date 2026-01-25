@@ -14,7 +14,7 @@
                 "data": {
                     "location_id": "Select your Home"
                 },
-                "description": "Multiple homes found. Please select the one to use."
+                "description": "Please select the home location to use."
             }
         },
         "error": {

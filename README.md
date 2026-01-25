@@ -33,14 +33,13 @@ The recommended way to install this integration is through the [Home Assistant C
 2.  Click **Add Integration** and search for "HomeWizard Cloud Watermeter".
 3.  Enter your HomeWizard account email and password. These are the same credentials you use for the mobile app.
 4.  If you have multiple homes configured in your account, select the correct location from the list of the second step.
-5.  The integration will automatically discover your devices (like Watermeter, P1 Meter, etc.) and create corresponding devices and sensor entities in Home Assistant.
+5.  The integration will automatically discover your HomeWizard watermeter devices and create corresponding devices and sensor entities in Home Assistant.
+6.  If you want to monitore your water usage, you can add the entity named "<Name of your Watermeter> Total Usage" to the water usage section of the Energy dashboard configuration.
 
 ## Important Notes
 
-- **Cloud-Based**: This integration relies on the HomeWizard Cloud. It is not real-time and will only update a few times a day, corresponding to when the battery-powered device uploads its data.
-- **Data Scope**: The integration fetches data from the "Energy Panel" view in the app, which represents daily totals.
+This integration relies on the HomeWizard Cloud. It is not real-time and will only update a few times a day, corresponding to when the battery-powered device uploads its data.
 
 ---
 
 *This is an unofficial integration and is not affiliated with HomeWizard.*
-
