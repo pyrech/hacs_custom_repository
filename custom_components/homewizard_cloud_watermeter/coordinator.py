@@ -2,7 +2,7 @@ from datetime import timedelta, datetime
 import logging
 
 from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
-from homeassistant.components.recorder.statistics import async_add_external_statistics
+from homeassistant.components.recorder.statistics import async_add_external_statistics, get_last_statistics
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 from homeassistant.const import UnitOfVolume
@@ -34,7 +34,8 @@ class HomeWizardCloudDataUpdateCoordinator(DataUpdateCoordinator):
             raise UpdateFailed(f"Error communicating with API: {err}")
 
         now = dt_util.now()
-        date_str = now.strftime("%Y/%m/%d")
+        yesterday = now - timedelta(days=1)
+
         data = []
 
         # Find watermeter devices and fetch their data
@@ -50,27 +51,36 @@ class HomeWizardCloudDataUpdateCoordinator(DataUpdateCoordinator):
 
             # Retrieve device data
             try:
-                tsdb_data = await self.api.async_get_tsdb_data(date_str, self.hass.config.time_zone, device["identifier"])
+                stats_today = await self.api.async_get_tsdb_data(now, self.hass.config.time_zone, device["identifier"])
             except Exception as err:
                 raise UpdateFailed(f"Error communicating with API: {err}")
 
-            if not tsdb_data or "values" not in tsdb_data:
-                _LOGGER.warning("No TSDB data received for watermeter device.")
+            if not stats_today or "values" not in stats_today:
+                _LOGGER.warning("No data received for watermeter device.")
                 continue
-
-            values = tsdb_data.get("values", [])
 
             if "recorder" in self.hass.config.components:
                 try:
-                    await self.async_inject_cleaned_stats(values, device)
+                    stats_yesterday = await self.api.async_get_tsdb_data(yesterday, self.hass.config.time_zone, device["identifier"])
                 except Exception as err:
-                    _LOGGER.error("Failed to inject statistics: %s", err)
+                    raise UpdateFailed(f"Error communicating with API: {err}")
+
+                if not stats_yesterday or not stats_yesterday or "values" not in stats_today or "values" not in stats_yesterday:
+                    _LOGGER.warning("No yesterday data received for watermeter device.")
+                    continue
+                else:
+                    combined_values = stats_yesterday.get("values", []) + stats_today.get("values", [])
+
+                    try:
+                        await self.async_inject_cleaned_stats(combined_values, device)
+                    except Exception as err:
+                        _LOGGER.error("Failed to inject statistics: %s", err)
             else:
                 _LOGGER.debug("Recorder not loaded, skipping statistics injection")
 
             daily_total = sum(
                 float(v.get("water") or 0)
-                for v in values
+                for v in stats_today.get("values", [])
             )
 
             data.append({
@@ -82,13 +92,25 @@ class HomeWizardCloudDataUpdateCoordinator(DataUpdateCoordinator):
         return data
 
     async def async_inject_cleaned_stats(self, values, device):
-        """Clean data and inject into Home Assistant statistics."""
+        """Clean data and inject into HA statistics with daily block handling."""
         statistic_id = f"{DOMAIN}:{device['sanitized_identifier']}_total"
+
+        # Get the absolute last point in history to ensure continuity
+        last_stats = await self.hass.async_add_executor_job(
+            get_last_statistics, self.hass, 1, statistic_id, True, {"sum"}
+        )
+        last_sum = 0.0
+        last_stat_time = None
+
+        if statistic_id in last_stats and last_stats[statistic_id]:
+            last_sum = last_stats[statistic_id][0]["sum"]
+            # Ensure we have a timezone-aware datetime for comparison
+            last_stat_time = dt_util.as_utc(last_stats[statistic_id][0]["start"])
 
         metadata = StatisticMetaData(
             has_mean=False,
-            has_sum=True, # Required for the Energy Dashboard
-            name=f"{device.get("name")} Total Usage",
+            has_sum=True,
+            name=f"{device.get('name')} Total Usage",
             source=DOMAIN,
             statistic_id=statistic_id,
             unit_of_measurement=UnitOfVolume.LITERS,
@@ -96,21 +118,34 @@ class HomeWizardCloudDataUpdateCoordinator(DataUpdateCoordinator):
 
         hourly_data = {}
         for entry in values:
+            # Ignore nulls (mainly future hours)
             if entry.get("water") is None:
                 continue
 
             time = dt_util.parse_datetime(entry["time"])
+            if not time:
+                continue
+
             hour_timestamp = time.replace(minute=0, second=0, microsecond=0)
+
+            # Security: don't process data far in the future
+            if hour_timestamp > dt_util.now() + timedelta(hours=1):
+                continue
 
             if hour_timestamp not in hourly_data:
                 hourly_data[hour_timestamp] = 0.0
-
             hourly_data[hour_timestamp] += float(entry["water"])
 
+        # Build statistics starting from the last known sum
         stat_data = []
-        cumulative_sum = 0.0
+        cumulative_sum = last_sum
 
         for hour in sorted(hourly_data.keys()):
+            hour_utc = dt_util.as_utc(hour)
+
+            if last_stat_time and hour_utc <= last_stat_time:
+                continue
+
             usage = hourly_data[hour]
             cumulative_sum += usage
 

@@ -1,5 +1,6 @@
 import aiohttp
 import async_timeout
+import datetime
 import logging
 import time
 
@@ -70,9 +71,9 @@ class HomeWizardCloudApi:
 
         return await self.call_graphql(payload)
 
-    async def async_get_tsdb_data(self, date_str: str, timezone: str, deviceIdentifier: str) -> dict:
+    async def async_get_tsdb_data(self, date: datetime, timezone: str, deviceIdentifier: str) -> dict:
         """Fetch time-series data."""
-        url = f"https://tsdb-reader.homewizard.com/devices/date/{date_str}"
+        url = f"https://tsdb-reader.homewizard.com/devices/date/{date.strftime("%Y/%m/%d")}"
         headers = await self.get_headers()
 
         payload = {
