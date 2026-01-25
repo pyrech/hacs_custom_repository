@@ -1,6 +1,7 @@
 {
     "domain": "homewizard_cloud_watermeter",
     "name": "HomeWizard Cloud Watermeter",
+    "after_dependencies": ["recorder"],
     "codeowners": ["@pyrech"],
     "config_flow": true,
     "dependencies": [],

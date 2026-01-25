@@ -1,3 +1,5 @@
 {
-    "name": "HomeWizard Cloud Watermeter"
+    "name": "HomeWizard Cloud Watermeter",
+    "render_readme": true,
+    "home_assistant": "2024.1.0"
 }

@@ -1,5 +1,6 @@
 import aiohttp
 import async_timeout
+import datetime
 import logging
 import time
 
@@ -33,7 +34,7 @@ class HomeWizardCloudApi:
                         self._token_expires_at = time.time() + expires_in - 60
                         _LOGGER.debug("Successfully authenticated. Token expires in %s s", expires_in)
                         return True
-                    
+
                     _LOGGER.error("Authentication failed with status: %s", response.status)
                     return False
         except Exception as ex:
@@ -56,26 +57,39 @@ class HomeWizardCloudApi:
                 _LOGGER.error("Error fetching locations: %s", ex)
                 return []
 
-    async def async_get_energy_panel_values(self, home_id: int, period: str):
-        """Fetch energy panel values for a specific period."""
-        url = "https://api.homewizard.energy/v1/graphql"
-        headers = await self.get_headers()
-        
+    async def async_get_devices(self, home_id: int) -> dict:
+        """Get the list of devices associated with the account."""
         payload = {
-            "operationName": "EnergyPanelValues",
+            "operationName": "DeviceList",
             "variables": {
-                "homeId": home_id,
-                "period": period
+                "homeId": home_id
             },
             "query": (
-                "query EnergyPanelValues($homeId: Int!, $period: TsdbPeriod!) { "
-                "home(id: $homeId) { "
-                "energyPanel { "
-                "values(period: $period) { "
-                "type title displayValue displayUnit "
-                "additionalValue { type title displayString displayValue displayUnit } "
-                "} } } }"
+                "query DeviceList($homeId: Int!) {home(id: $homeId) { devices { identifier name wifiStrength ... on CloudDevice { type model hardwareVersion onlineState }}}}"
             )
+        }
+
+        return await self.call_graphql(payload)
+
+    async def async_get_tsdb_data(self, date: datetime, timezone: str, deviceIdentifier: str) -> dict:
+        """Fetch time-series data."""
+        url = f"https://tsdb-reader.homewizard.com/devices/date/{date.strftime("%Y/%m/%d")}"
+        headers = await self.get_headers()
+
+        payload = {
+            "devices": [
+                {
+                    "identifier": deviceIdentifier,
+                    "measurementType": "water"
+                }
+            ],
+            "type": "water",
+            "values": True,
+            "wattage": True,
+            "gb": "15m",
+            "tz": timezone,
+            "fill": "linear",
+            "three_phases": False
         }
 
         try:
@@ -83,10 +97,26 @@ class HomeWizardCloudApi:
                 async with self._session.post(url, json=payload, headers=headers) as response:
                     if response.status == 200:
                         return await response.json()
-                    _LOGGER.error("GraphQL energy panel request failed: %s", response.status)
+                    _LOGGER.error("TSDB request failed: %s, %s", response.status, await response.text())
                     return None
         except Exception as ex:
-            _LOGGER.error("Error during energy panel GraphQL request: %s", ex)
+            _LOGGER.error("Error during TSDB request: %s", ex)
+            return None
+
+    async def call_graphql(self, payload: dict, ) -> dict:
+        """Call graphql endpoint with given payload."""
+        url = "https://api.homewizard.energy/v1/graphql"
+        headers = await self.get_headers()
+
+        try:
+            async with async_timeout.timeout(10):
+                async with self._session.post(url, json=payload, headers=headers) as response:
+                    if response.status == 200:
+                        return await response.json()
+                    _LOGGER.error("GraphQL request failed: %s", response.status)
+                    return None
+        except Exception as ex:
+            _LOGGER.error("Error during GraphQL request: %s", ex)
             return None
 
     async def get_headers(self) -> dict:

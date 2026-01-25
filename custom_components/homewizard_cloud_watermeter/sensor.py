@@ -1,10 +1,12 @@
 import logging
 from homeassistant.components.sensor import (
+    EntityCategory,
     SensorDeviceClass,
     SensorEntity,
     SensorStateClass,
 )
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.const import PERCENTAGE
 
 from .const import DOMAIN
 
@@ -13,69 +15,108 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass, entry, async_add_entities):
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator = data["coordinator"]
-    
+
     if not coordinator.data:
-        _LOGGER.error("No data found in coordinator, sensors will not be created")
-        return
+        _LOGGER.error("No devices found, sensors will not be created")
 
     entities = []
-    # Create a sensor for each value returned by the energyPanel
+
+    # Create a sensor for each homewizard device
     for value in coordinator.data.values():
-        entities.append(HomeWizardCloudWaterSensor(coordinator, value))
+        entities.append(HomeWizardDailyTotalSensor(coordinator, value))
+        entities.append(HomeWizardWifiSensor(coordinator, value))
+        entities.append(HomeWizardOnlineSensor(coordinator, value))
 
     async_add_entities(entities)
 
-class HomeWizardCloudWaterSensor(CoordinatorEntity, SensorEntity):
+class HomeWizardBaseSensor(CoordinatorEntity):
+    """Common base for all HomeWizard sensors."""
+    _attr_has_entity_name = True
+
     def __init__(self, coordinator, value):
+        """Initialize the sensor."""
         super().__init__(coordinator)
+        self._sanitized_identifier = value["device"].get("sanitized_identifier")
 
-        self._type = value["type"]
-        self._attr_name = f"HomeWizard {value['title']}"
-        self._attr_unique_id = f"{coordinator.home_id}_{self._type}"
-
-        # Use TOTAL for daily values that reset at midnight
-        self._attr_state_class = SensorStateClass.TOTAL
-        
-        # Assign Device Class based on type
-        type_lower = self._type.lower()
-        
-        if "water" in type_lower:
-            self._attr_device_class = SensorDeviceClass.WATER
+        # Unique ID needs to be unique per entity, so we append the class name or a suffix
+        # This will be overridden or extended in child classes
+        self._attr_unique_id = f"{self._sanitized_identifier}_{self.__class__.__name__}"
 
     @property
     def device_info(self):
-        """Return device information about this entity."""
+        """Return device information to group all entities under the same device."""
+        device = self.coordinator.data.get(self._sanitized_identifier)["device"]
+
+        # Ensure we have a valid device
+        if not device:
+            return None
+
         return {
-            "identifiers": {(DOMAIN, self.coordinator.home_id)},
-            "name": self.coordinator.config_entry.title,
+            "identifiers": {(DOMAIN, self._sanitized_identifier)},
+            "name": device.get("name", "HomeWizard Watermeter"),
             "manufacturer": "HomeWizard",
+            "model": device.get("model"),
+            "hw_version": device.get("hardwareVersion"),
         }
+
+class HomeWizardDailyTotalSensor(HomeWizardBaseSensor, SensorEntity):
+    def __init__(self, coordinator, data):
+        super().__init__(coordinator, data)
+
+        self._attr_name = "Daily usage"
+        self._attr_unique_id = f"{self._sanitized_identifier}_daily_total"
+        self._attr_device_class = SensorDeviceClass.WATER
+        self._attr_native_unit_of_measurement = data["unit"]
+
+        # Use TOTAL for daily values that reset at midnight
+        self._attr_state_class = SensorStateClass.TOTAL
 
     @property
     def native_value(self):
         """Return the state of the sensor as a float."""
-        if not self.coordinator.data or self._type not in self.coordinator.data:
+        daily_total = self.coordinator.data.get(self._sanitized_identifier)["daily_total"]
+
+        if not daily_total:
             return None
 
-        item = self.coordinator.data[self._type]
-        # Get the raw string value (e.g. "1.234" or "1 234,50")
-        raw_value = str(item.get("displayValue", "0"))
         try:
-            # Remove spaces and normalize decimal separator
-            clean_value = raw_value.replace(" ", "").replace(",", ".")
-            return float(clean_value)
+            return float(daily_total)
         except ValueError:
-            _LOGGER.warning("Could not convert value '%s' to float", raw_value)
+            _LOGGER.warning("Could not convert value '%s' to float", daily_total)
             return None
 
     @property
-    def native_unit_of_measurement(self):
-        """Return the unit of measurement normalized for HA."""
-        if not self.coordinator.data or self._type not in self.coordinator.data:
-            return None
+    def extra_state_attributes(self):
+        """Return entity specific state attributes."""
+        return {
+            "statistic_id": f"{DOMAIN}:{self._sanitized_identifier}_total"
+        }
 
-        item = self.coordinator.data[self._type]
-        unit = item.get("displayUnit")
-        if unit == "m3":
-            return "m³"
-        return unit
+class HomeWizardWifiSensor(HomeWizardBaseSensor, SensorEntity):
+    def __init__(self, coordinator, data):
+        super().__init__(coordinator, data)
+
+        self._attr_name = "Wifi Signal"
+        self._attr_unique_id = f"{self._sanitized_identifier}_wifi_signal"
+        self._attr_native_unit_of_measurement = PERCENTAGE
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        self._attr_icon = "mdi:wifi"
+        self._attr_entity_registry_enabled_default = False
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get(self._sanitized_identifier)["device"].get("wifiStrength", 0)
+
+class HomeWizardOnlineSensor(HomeWizardBaseSensor, SensorEntity):
+    def __init__(self, coordinator, data):
+        super().__init__(coordinator, data)
+
+        self._attr_name = "Online State"
+        self._attr_unique_id = f"{self._sanitized_identifier}_online_state"
+        self._attr_device_class = SensorDeviceClass.ENUM
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        self._attr_entity_registry_enabled_default = False
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get(self._sanitized_identifier)["device"].get("onlineState", "Unknown")

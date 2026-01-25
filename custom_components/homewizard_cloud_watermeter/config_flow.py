@@ -28,11 +28,11 @@ class HomeWizardCloudConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             session = async_get_clientsession(self.hass)
             integration = await async_get_integration(self.hass, DOMAIN)
-            
+
             # Initialize our API client with user credentials
             api = HomeWizardCloudApi(
-                user_input[CONF_EMAIL], 
-                user_input[CONF_PASSWORD], 
+                user_input[CONF_EMAIL],
+                user_input[CONF_PASSWORD],
                 session,
                 integration.version,
             )
@@ -57,13 +57,13 @@ class HomeWizardCloudConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_location(self, user_input=None):
         """Handle the second step: Select Location."""
         errors = {}
-        
+
         # We need the API again to fetch locations or validate
         session = async_get_clientsession(self.hass)
         integration = await async_get_integration(self.hass, DOMAIN)
         api = HomeWizardCloudApi(
-            self._data[CONF_EMAIL], 
-            self._data[CONF_PASSWORD], 
+            self._data[CONF_EMAIL],
+            self._data[CONF_PASSWORD],
             session,
             integration.version,
         )
@@ -90,7 +90,7 @@ class HomeWizardCloudConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="no_locations")
 
         self._locations = {
-            loc["id"]: f"{loc.get('name', 'Home')} ({loc.get('location', 'No address')})" 
+            loc["id"]: f"{loc.get('name', 'Home')} ({loc.get('location', 'No address')})"
             for loc in locations_data
         }
 

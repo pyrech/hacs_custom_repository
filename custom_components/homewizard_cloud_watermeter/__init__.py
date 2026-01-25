@@ -16,7 +16,7 @@ PLATFORMS: list[Platform] = [Platform.SENSOR]
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     session = async_get_clientsession(hass)
     integration = await async_get_integration(hass, DOMAIN)
-    
+
     api = HomeWizardCloudApi(
         entry.data[CONF_EMAIL],
         entry.data[CONF_PASSWORD],
@@ -25,8 +25,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     coordinator = HomeWizardCloudDataUpdateCoordinator(
-        hass, 
-        api, 
+        hass,
+        api,
         entry.data["home_id"]
     )
 
@@ -45,7 +45,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Unload all platforms (sensors, etc.)
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    
+
     if unload_ok:
         # Clean up the memory
         hass.data[DOMAIN].pop(entry.entry_id)
