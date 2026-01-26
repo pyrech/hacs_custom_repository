@@ -2,8 +2,13 @@ from datetime import timedelta, datetime
 import logging
 
 from homeassistant.components.recorder import get_instance
-from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
+from homeassistant.components.recorder.models import (
+    StatisticData,
+    StatisticMetaData,
+    StatisticMeanType,
+)
 from homeassistant.components.recorder.statistics import async_add_external_statistics, get_last_statistics
+from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 from homeassistant.const import UnitOfVolume
@@ -122,8 +127,8 @@ class HomeWizardCloudDataUpdateCoordinator(DataUpdateCoordinator):
             source=DOMAIN,
             statistic_id=statistic_id,
             unit_of_measurement=UnitOfVolume.LITERS,
-            unit_class="volume",
-            mean_type=None,
+            unit_class=SensorDeviceClass.VOLUME,
+            mean_type=StatisticMeanType.NONE,
         )
 
         hourly_data = {}
