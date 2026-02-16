@@ -41,14 +41,12 @@ The official [HomeWizard Energy](https://www.home-assistant.io/integrations/home
 The recommended way to install this integration is through the [Home Assistant Community Store (HACS)](https://hacs.xyz/).
 
 1. Open **HACS** > **Integrations**.
-2. Click the three dots in the top right and select **Custom repositories**.
-3. Paste: `https://github.com/pyrech/homewizard_cloud_watermeter`
-4. Select **Integration** as the category and click **Add**.
-5. Find **HomeWizard Cloud Watermeter** and click **Install**.
-6. **Restart** Home Assistant.
+2. Search for `HomeWizard Cloud Watermeter` and **install** the integration.
+3. **Restart** Home Assistant.
 
 ### Option 2: Manual
-Copy the `custom_components/homewizard_cloud_watermeter` folder into your `config/custom_components` directory and restart.
+
+Copy the `custom_components/homewizard_cloud_watermeter` folder into your `config/custom_components` directory, then restart Home Assistant.
 
 ---
 
