@@ -1,6 +1,7 @@
 from datetime import timedelta, datetime
 import logging
 
+from homeassistant.components.persistent_notification import DOMAIN as NOTIFY_DOMAIN
 from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.models import (
     StatisticData,
@@ -9,6 +10,7 @@ from homeassistant.components.recorder.models import (
 )
 from homeassistant.components.recorder.statistics import async_add_external_statistics, get_last_statistics
 from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.components.persistent_notification import async_create, async_dismiss
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 from homeassistant.const import UnitOfVolume
@@ -23,6 +25,7 @@ class HomeWizardCloudDataUpdateCoordinator(DataUpdateCoordinator):
         self.api = api
         self.home_id = home_id
         self._pending_stats = None
+        self._offline_devices = set()
         super().__init__(
             hass,
             _LOGGER,
@@ -89,6 +92,26 @@ class HomeWizardCloudDataUpdateCoordinator(DataUpdateCoordinator):
                 "device": device,
                 "last_sync_at": last_sync_at,
             })
+
+            # Check and handle online state changes
+            online_state = device.get("onlineState", "Unknown")
+            device_name = device.get("name", "Watermeter")
+            sanitized_identifier = device['sanitized_identifier']
+
+            if online_state == "OFFLINE" and sanitized_identifier not in self._offline_devices:
+                self._offline_devices.add(sanitized_identifier)
+                async_create(
+                    self.hass,
+                    f"Watermeter device {device_name} is offline. Please check if the batteries need to be replaced.",
+                    title="HomeWizard Watermeter",
+                    notification_id=f"homewizard_watermeter_offline_{sanitized_identifier}"
+                )
+            elif online_state == "ONLINE_RECENTLY" and sanitized_identifier in self._offline_devices:
+                self._offline_devices.remove(sanitized_identifier)
+                async_dismiss(
+                    self.hass,
+                    notification_id=f"homewizard_watermeter_offline_{sanitized_identifier}"
+                )
 
         return data
 
