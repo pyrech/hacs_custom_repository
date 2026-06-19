@@ -194,7 +194,9 @@ class HomeWizardCloudDataUpdateCoordinator(DataUpdateCoordinator):
                 )
             )
 
-        if stat_data:
-            async_add_external_statistics(self.hass, metadata, stat_data)
+        # Always register the metadata, even with no new data points, so the
+        # statistic is immediately selectable in the Energy dashboard instead
+        # of waiting for the first hour with non-zero usage.
+        async_add_external_statistics(self.hass, metadata, stat_data)
 
         return cumulative_sum
