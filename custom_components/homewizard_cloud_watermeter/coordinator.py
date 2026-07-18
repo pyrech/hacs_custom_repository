@@ -8,7 +8,11 @@ from homeassistant.components.recorder.models import (
     StatisticMetaData,
     StatisticMeanType,
 )
-from homeassistant.components.recorder.statistics import async_add_external_statistics, get_last_statistics
+from homeassistant.components.recorder.statistics import (
+    async_add_external_statistics,
+    get_last_statistics,
+    statistics_during_period,
+)
 from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.components.persistent_notification import async_create, async_dismiss
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -116,27 +120,14 @@ class HomeWizardCloudDataUpdateCoordinator(DataUpdateCoordinator):
         return data
 
     async def async_inject_cleaned_stats(self, values: list, device: dict):
-        """Clean data and inject into HA statistics with daily block handling."""
+        """Clean data and inject into HA statistics, rewriting the fetched window.
+
+        Rows already recorded inside the window are updated in place (the
+        recorder overwrites external statistics sharing the same start), so
+        the partially-recorded current hour and late-arriving cloud revisions
+        get corrected on the next poll instead of being lost.
+        """
         statistic_id = f"{DOMAIN}:{device['sanitized_identifier']}_total"
-
-        # Get the absolute last point in history to ensure continuity
-        last_stats = await get_instance(self.hass).async_add_executor_job(
-            get_last_statistics, self.hass, 1, statistic_id, True, {"sum"}
-        )
-
-        last_sum = 0.0
-        last_stat_time = None
-
-        if statistic_id in last_stats and last_stats[statistic_id]:
-            point = last_stats[statistic_id][0]
-            last_sum = point.get("sum") or 0.0
-
-            raw_start = point.get("start")
-            if raw_start is not None:
-                if isinstance(raw_start, (int, float)):
-                    last_stat_time = dt_util.utc_from_timestamp(raw_start)
-                else:
-                    last_stat_time = dt_util.as_utc(raw_start)
 
         metadata = StatisticMetaData(
             has_sum=True,
@@ -158,30 +149,71 @@ class HomeWizardCloudDataUpdateCoordinator(DataUpdateCoordinator):
             if not time:
                 continue
 
-            hour_timestamp = time.replace(minute=0, second=0, microsecond=0)
+            hour_timestamp = dt_util.as_utc(time.replace(minute=0, second=0, microsecond=0))
 
             # Security: don't process data far in the future
-            if hour_timestamp > dt_util.now() + timedelta(hours=1):
+            if hour_timestamp > dt_util.utcnow() + timedelta(hours=1):
                 continue
 
             if hour_timestamp not in hourly_data:
                 hourly_data[hour_timestamp] = 0.0
             hourly_data[hour_timestamp] += float(entry["water"])
 
-        # Build statistics starting from the last known sum
+        # Get the absolute last point in history to ensure continuity
+        last_stats = await get_instance(self.hass).async_add_executor_job(
+            get_last_statistics, self.hass, 1, statistic_id, True, {"sum"}
+        )
+
+        last_sum = 0.0
+        last_stat_time = None
+
+        if statistic_id in last_stats and last_stats[statistic_id]:
+            point = last_stats[statistic_id][0]
+            last_sum = point.get("sum") or 0.0
+
+            raw_start = point.get("start")
+            if raw_start is not None:
+                if isinstance(raw_start, (int, float)):
+                    last_stat_time = dt_util.utc_from_timestamp(raw_start)
+                else:
+                    last_stat_time = dt_util.as_utc(raw_start)
+
+        if not hourly_data:
+            # Always register the metadata, even with no data points, so the
+            # statistic is immediately selectable in the Energy dashboard.
+            async_add_external_statistics(self.hass, metadata, [])
+            return last_sum
+
+        window_start = min(hourly_data)
+
+        # Baseline: cumulative sum just before the fetched window. When
+        # existing rows overlap the window, the sum right before the first
+        # overlapping row is that row's sum minus its own state.
+        baseline_sum = last_sum
+        if last_stat_time is not None and last_stat_time >= window_start:
+            overlap = await get_instance(self.hass).async_add_executor_job(
+                statistics_during_period,
+                self.hass,
+                window_start,
+                None,
+                {statistic_id},
+                "hour",
+                None,
+                {"state", "sum"},
+            )
+            rows = overlap.get(statistic_id) or []
+            if rows:
+                baseline_sum = (rows[0].get("sum") or 0.0) - (rows[0].get("state") or 0.0)
+
         stat_data = []
-        cumulative_sum = last_sum
+        cumulative_sum = baseline_sum
 
         for hour in sorted(hourly_data.keys()):
-            hour_utc = dt_util.as_utc(hour)
-
-            if last_stat_time and hour_utc <= last_stat_time:
-                continue
-
             usage = hourly_data[hour]
 
-            # Ignore hours without water usage
-            if usage == 0:
+            # Skip empty hours beyond what is already recorded; inside the
+            # rewritten region keep them so stale rows get corrected.
+            if usage == 0 and (last_stat_time is None or hour > last_stat_time):
                 continue
 
             cumulative_sum += usage
@@ -194,9 +226,6 @@ class HomeWizardCloudDataUpdateCoordinator(DataUpdateCoordinator):
                 )
             )
 
-        # Always register the metadata, even with no new data points, so the
-        # statistic is immediately selectable in the Energy dashboard instead
-        # of waiting for the first hour with non-zero usage.
         async_add_external_statistics(self.hass, metadata, stat_data)
 
         return cumulative_sum
