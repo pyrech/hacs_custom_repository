@@ -1,0 +1,11 @@
+import_day:
+  name: Import day
+  description: Re-fetch and re-import water consumption statistics for a specific day. Later days are automatically re-aligned.
+  fields:
+    date:
+      name: Date
+      description: The day to re-import.
+      required: true
+      example: "2026-07-15"
+      selector:
+        date:

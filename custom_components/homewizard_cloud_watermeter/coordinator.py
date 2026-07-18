@@ -119,6 +119,21 @@ class HomeWizardCloudDataUpdateCoordinator(DataUpdateCoordinator):
 
         return data
 
+    async def async_import_day(self, date):
+        """Re-fetch and re-inject statistics for a single day."""
+        day = datetime.combine(date, datetime.min.time())
+
+        for info in (self.data or {}).values():
+            device = info["device"]
+
+            stats = await self.api.async_get_tsdb_data(day, self.hass.config.time_zone, device["identifier"])
+            if not stats or "values" not in stats:
+                _LOGGER.warning("No data received for device '%s' on %s, skipping.", device["identifier"], date)
+                continue
+
+            _LOGGER.info("Re-importing statistics for device '%s' on %s.", device["identifier"], date)
+            await self.async_inject_cleaned_stats(stats.get("values", []), device)
+
     async def async_inject_cleaned_stats(self, values: list, device: dict):
         """Clean data and inject into HA statistics, rewriting the fetched window.
 
@@ -185,13 +200,14 @@ class HomeWizardCloudDataUpdateCoordinator(DataUpdateCoordinator):
             return last_sum
 
         window_start = min(hourly_data)
+        window_end = max(hourly_data) + timedelta(hours=1)
 
-        # Baseline: cumulative sum just before the fetched window. When
-        # existing rows overlap the window, the sum right before the first
-        # overlapping row is that row's sum minus its own state.
-        baseline_sum = last_sum
+        # Existing rows from the window start onward: used to rebase the
+        # cumulative sum before the window, and to shift the rows recorded
+        # after the window when a past day is re-imported.
+        existing_rows = []
         if last_stat_time is not None and last_stat_time >= window_start:
-            overlap = await get_instance(self.hass).async_add_executor_job(
+            existing = await get_instance(self.hass).async_add_executor_job(
                 statistics_during_period,
                 self.hass,
                 window_start,
@@ -201,9 +217,16 @@ class HomeWizardCloudDataUpdateCoordinator(DataUpdateCoordinator):
                 None,
                 {"state", "sum"},
             )
-            rows = overlap.get(statistic_id) or []
-            if rows:
-                baseline_sum = (rows[0].get("sum") or 0.0) - (rows[0].get("state") or 0.0)
+            existing_rows = existing.get(statistic_id) or []
+
+        # Baseline: cumulative sum just before the fetched window, i.e. the
+        # first existing row's sum minus its own state.
+        baseline_sum = last_sum
+        if existing_rows:
+            baseline_sum = (existing_rows[0].get("sum") or 0.0) - (existing_rows[0].get("state") or 0.0)
+
+        in_window = [r for r in existing_rows if r["start"] < window_end.timestamp()]
+        after_window = [r for r in existing_rows if r["start"] >= window_end.timestamp()]
 
         stat_data = []
         cumulative_sum = baseline_sum
@@ -226,6 +249,20 @@ class HomeWizardCloudDataUpdateCoordinator(DataUpdateCoordinator):
                 )
             )
 
+        # If rows exist after the window (past-day re-import), shift their
+        # sums by the delta introduced by the rewrite to keep continuity.
+        old_sum_at_window_end = in_window[-1]["sum"] if in_window else baseline_sum
+        delta = cumulative_sum - (old_sum_at_window_end or 0.0)
+        if delta:
+            for row in after_window:
+                stat_data.append(
+                    StatisticData(
+                        start=dt_util.utc_from_timestamp(row["start"]),
+                        state=row.get("state") or 0.0,
+                        sum=(row.get("sum") or 0.0) + delta,
+                    )
+                )
+
         async_add_external_statistics(self.hass, metadata, stat_data)
 
-        return cumulative_sum
+        return cumulative_sum if not after_window else (after_window[-1].get("sum") or 0.0) + delta
