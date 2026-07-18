@@ -1,0 +1,20 @@
+name: API smoke test
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"  # weekly, Monday 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements_test.txt
+      - run: pytest tests/test_smoke.py -v
+        env:
+          HW_EMAIL: ${{ secrets.HW_EMAIL }}
+          HW_PASSWORD: ${{ secrets.HW_PASSWORD }}

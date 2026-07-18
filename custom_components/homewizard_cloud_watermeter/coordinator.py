@@ -65,7 +65,9 @@ class HomeWizardCloudDataUpdateCoordinator(DataUpdateCoordinator):
 
             # Sanitize the identifier for Home Assistant's use
             # This will be used for statistic_id, unique_id, and device_id
-            device['sanitized_identifier'] = device["identifier"].replace('/', '_')
+            # Lowercase is required: the recorder rejects statistic ids
+            # containing uppercase characters.
+            device['sanitized_identifier'] = device["identifier"].replace('/', '_').lower()
 
             # Retrieve device data
             stats_today = await self.api.async_get_tsdb_data(now, self.hass.config.time_zone, device["identifier"])
