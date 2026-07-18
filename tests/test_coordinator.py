@@ -1,6 +1,7 @@
 """Tests for the statistics injection logic of the coordinator."""
 from datetime import timedelta
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.statistics import statistics_during_period
@@ -127,3 +128,84 @@ async def test_gap_keeps_sum_continuity(recorder_mock, hass):
 
     assert total == 17.0
     assert await get_rows(hass) == [(old, 10.0, 10.0), (recent, 7.0, 17.0)]
+
+
+def cloud_device(online_state: str):
+    return {
+        "identifier": "water/ABC",
+        "type": "watermeter",
+        "name": "Water",
+        "onlineState": online_state,
+    }
+
+
+def make_cloud_coordinator(hass, device: dict):
+    coordinator = make_coordinator(hass)
+    coordinator.api = SimpleNamespace(
+        async_get_devices=AsyncMock(
+            return_value={"data": {"home": {"devices": [device]}}}
+        ),
+        async_get_tsdb_data=AsyncMock(return_value={"values": []}),
+    )
+    return coordinator
+
+
+async def test_offline_device_creates_notification_once(recorder_mock, hass):
+    device = cloud_device("OFFLINE")
+    coordinator = make_cloud_coordinator(hass, device)
+
+    with patch(
+        "custom_components.homewizard_cloud_watermeter.coordinator.async_create"
+    ) as create:
+        await coordinator._async_update_data()
+        # A second poll while still offline must not notify again
+        await coordinator._async_update_data()
+
+    assert create.call_count == 1
+    assert (
+        create.call_args.kwargs["notification_id"]
+        == "homewizard_watermeter_offline_water_abc"
+    )
+
+
+async def test_back_online_dismisses_notification(recorder_mock, hass):
+    device = cloud_device("OFFLINE")
+    coordinator = make_cloud_coordinator(hass, device)
+
+    with (
+        patch(
+            "custom_components.homewizard_cloud_watermeter.coordinator.async_create"
+        ) as create,
+        patch(
+            "custom_components.homewizard_cloud_watermeter.coordinator.async_dismiss"
+        ) as dismiss,
+    ):
+        await coordinator._async_update_data()
+        device["onlineState"] = "ONLINE_RECENTLY"
+        await coordinator._async_update_data()
+
+        # Going offline again must notify again
+        device["onlineState"] = "OFFLINE"
+        await coordinator._async_update_data()
+
+    assert create.call_count == 2
+    dismiss.assert_called_once_with(
+        hass, notification_id="homewizard_watermeter_offline_water_abc"
+    )
+
+
+async def test_online_device_never_notifies(recorder_mock, hass):
+    coordinator = make_cloud_coordinator(hass, cloud_device("ONLINE_RECENTLY"))
+
+    with (
+        patch(
+            "custom_components.homewizard_cloud_watermeter.coordinator.async_create"
+        ) as create,
+        patch(
+            "custom_components.homewizard_cloud_watermeter.coordinator.async_dismiss"
+        ) as dismiss,
+    ):
+        await coordinator._async_update_data()
+
+    create.assert_not_called()
+    dismiss.assert_not_called()
