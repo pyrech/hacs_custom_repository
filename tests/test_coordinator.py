@@ -17,7 +17,7 @@ from custom_components.homewizard_cloud_watermeter.coordinator import (
 )
 
 DEVICE = {
-    "identifier": "water/abc",
+    "identifier": "water/ABC",
     "sanitized_identifier": "water_abc",
     "name": "Water",
 }
